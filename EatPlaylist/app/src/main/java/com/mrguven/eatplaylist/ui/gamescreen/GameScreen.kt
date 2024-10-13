@@ -5,6 +5,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -33,6 +34,7 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -42,12 +44,13 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.palette.graphics.Palette
 import com.mrguven.eatplaylist.data.model.Direction
+import com.mrguven.eatplaylist.data.model.RotationDirection
 import com.mrguven.eatplaylist.data.model.SnakeUnit
 import com.mrguven.eatplaylist.viewmodel.EatPlaylistViewModel
 import kotlinx.coroutines.delay
 import kotlin.math.absoluteValue
 
-const val EFFECT_MILLISECOND = 300
+const val EFFECT_MILLISECOND = 400
 const val ANIMATION_MILLISECOND = 500
 
 @Composable
@@ -127,17 +130,77 @@ fun DrawSnakeHead(
     val (x, y) = calculateCanvasCoordinates(snakeUnit.index, horizontalFactor, cellSizePx)
     val (adjustedX, adjustedY) = getPaddingAdjustedCoordinates(x, y, snakeUnit.direction)
 
+    val targetRotationAngle = calculateRotationAngle(snakeUnit.rotationDirection)
+    val rotationAngle by animateFloatAsState(
+        targetValue = targetRotationAngle,
+        animationSpec = tween(durationMillis = EFFECT_MILLISECOND / 2),
+        label = "Snake Head Rotation Angle"
+    )
+
+    val previousPosition =
+        remember(snakeUnit.rotationDirection, snakeUnit.direction, adjustedX, adjustedY) {
+            calculatePreviousPosition(snakeUnit.direction, adjustedX, adjustedY, cellSizePx)
+        }
+
+    val pivotOffset =
+        remember(snakeUnit.rotationDirection, snakeUnit.direction, adjustedX, adjustedY) {
+            calculatePivotOffset(
+                snakeUnit.rotationDirection, snakeUnit.direction, adjustedX, adjustedY, cellSizePx
+            )
+        }
+
+    when (snakeUnit.rotationDirection) {
+        RotationDirection.NO_ROTATION ->
+            DrawStaticSnakeHead(adjustedX, adjustedY, snakeUnit.direction, cellSizePx)
+
+        else ->
+            DrawRotatedSnakeHead(
+                previousPosition,
+                rotationAngle,
+                pivotOffset,
+                snakeUnit.previousDirection,
+                cellSizePx
+            )
+    }
+}
+
+@Composable
+private fun DrawStaticSnakeHead(
+    x: Float, y: Float, direction: Direction, cellSizePx: Float,
+) {
     Canvas(modifier = Modifier.fillMaxSize()) {
-        val rect = Rect(Offset(adjustedX, adjustedY), Size(cellSizePx, cellSizePx))
-        val trianglePath = createTrianglePath(rect, snakeUnit.direction)
+        val rect = Rect(Offset(x, y), Size(cellSizePx, cellSizePx))
+        val trianglePath = createTrianglePath(rect, direction)
 
         drawIntoCanvas { canvas ->
-            canvas.drawOutline(
-                outline = Outline.Generic(trianglePath),
-                paint = Paint().apply {
+            canvas.drawOutline(outline = Outline.Generic(trianglePath), paint = Paint().apply {
+                color = Color.White
+                pathEffect = PathEffect.cornerPathEffect(rect.maxDimension / 5)
+            })
+        }
+    }
+}
+
+@Composable
+private fun DrawRotatedSnakeHead(
+    previousPosition: Offset,
+    rotationAngle: Float,
+    pivotOffset: Offset,
+    previousDirection: Direction,
+    cellSizePx: Float,
+) {
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        val rect =
+            Rect(Offset(previousPosition.x, previousPosition.y), Size(cellSizePx, cellSizePx))
+        val trianglePath = createTrianglePath(rect, previousDirection)
+
+        rotate(degrees = rotationAngle, pivot = pivotOffset) {
+            drawIntoCanvas { canvas ->
+                canvas.drawOutline(outline = Outline.Generic(trianglePath), paint = Paint().apply {
                     color = Color.White
                     pathEffect = PathEffect.cornerPathEffect(rect.maxDimension / 5)
                 })
+            }
         }
     }
 }
@@ -147,28 +210,139 @@ fun DrawSnakeBody(
     snakeUnit: SnakeUnit, horizontalFactor: Int, cellSize: Dp
 ) {
     val cellSizePx = dpToPx(cellSize)
-    val (x, y) = calculateCanvasCoordinates(snakeUnit.index, horizontalFactor, cellSizePx)
+    val (x, y) = remember(snakeUnit.index, horizontalFactor, cellSizePx) {
+        calculateCanvasCoordinates(snakeUnit.index, horizontalFactor, cellSizePx)
+    }
 
-    Canvas(modifier = Modifier.size(cellSize)) {
-        val roundedRect = RoundRect(
-            left = x,
-            top = y,
-            right = x + cellSizePx,
-            bottom = y + cellSizePx,
-            cornerRadius = CornerRadius(10f, 10f)
+    val targetRotationAngle = calculateRotationAngle(snakeUnit.rotationDirection)
+    val rotationAngle by animateFloatAsState(
+        targetValue = targetRotationAngle,
+        animationSpec = tween(durationMillis = EFFECT_MILLISECOND / 2),
+        label = "Snake Body Rotation Angle"
+    )
+
+    val previousPosition =
+        remember(snakeUnit.rotationDirection, snakeUnit.previousDirection, x, y) {
+            calculatePreviousPosition(snakeUnit.previousDirection, x, y, cellSizePx)
+        }
+
+    val pivotOffset = remember(snakeUnit.rotationDirection, snakeUnit.previousDirection, x, y) {
+        calculatePivotOffset(
+            snakeUnit.rotationDirection, snakeUnit.previousDirection, x, y, cellSizePx
         )
+    }
+
+    when (snakeUnit.rotationDirection) {
+        RotationDirection.NO_ROTATION ->
+            DrawStaticImage(snakeUnit.imageBitmap, Offset(x, y), cellSizePx)
+
+        else ->
+            DrawRotatedImage(
+                snakeUnit.imageBitmap, rotationAngle, pivotOffset, previousPosition, cellSizePx
+            )
+    }
+}
+
+@Composable
+private fun DrawStaticImage(
+    bitmap: Bitmap, position: Offset, cellSizePx: Float
+) {
+    Canvas(modifier = Modifier.size(cellSizePx.dp)) {
+        val roundedRect = createRoundedRect(position, cellSizePx)
         val path = Path().apply { addRoundRect(roundedRect, Path.Direction.Clockwise) }
 
         with(drawContext.canvas) {
             clipPath(path)
             drawImageRect(
-                image = snakeUnit.imageBitmap.asImageBitmap(),
+                image = bitmap.asImageBitmap(),
                 paint = Paint(),
-                dstOffset = IntOffset(x.toInt(), y.toInt()),
+                dstOffset = IntOffset(position.x.toInt(), position.y.toInt()),
                 dstSize = IntSize(cellSizePx.toInt(), cellSizePx.toInt()),
                 srcOffset = IntOffset.Zero,
-                srcSize = IntSize(snakeUnit.imageBitmap.width, snakeUnit.imageBitmap.height)
+                srcSize = IntSize(bitmap.width, bitmap.height)
             )
+        }
+    }
+}
+
+@Composable
+private fun DrawRotatedImage(
+    bitmap: Bitmap, rotationAngle: Float, pivotOffset: Offset, position: Offset, cellSizePx: Float
+) {
+    Canvas(modifier = Modifier.size(cellSizePx.dp)) {
+        val roundedRect = createRoundedRect(position, cellSizePx)
+        val path = Path().apply { addRoundRect(roundedRect, Path.Direction.Clockwise) }
+
+        rotate(degrees = rotationAngle, pivot = pivotOffset) {
+            with(drawContext.canvas) {
+                clipPath(path)
+                drawImageRect(
+                    image = bitmap.asImageBitmap(),
+                    paint = Paint(),
+                    dstOffset = IntOffset(position.x.toInt(), position.y.toInt()),
+                    dstSize = IntSize(cellSizePx.toInt(), cellSizePx.toInt()),
+                    srcOffset = IntOffset.Zero,
+                    srcSize = IntSize(bitmap.width, bitmap.height)
+                )
+            }
+        }
+    }
+}
+
+private fun createRoundedRect(position: Offset, cellSizePx: Float) = RoundRect(
+    left = position.x,
+    top = position.y,
+    right = position.x + cellSizePx,
+    bottom = position.y + cellSizePx,
+    cornerRadius = CornerRadius(10f, 10f)
+)
+
+fun calculateRotationAngle(rotationDirection: RotationDirection): Float {
+    return when (rotationDirection) {
+        RotationDirection.CLOCKWISE -> 90f
+        RotationDirection.COUNTER_CLOCKWISE -> -90f
+        RotationDirection.NO_ROTATION -> 0f
+    }
+}
+
+private fun calculatePreviousPosition(
+    previousDirection: Direction, x: Float, y: Float, cellSizePx: Float
+): Offset {
+    return when (previousDirection) {
+        Direction.RIGHT -> Offset(x - cellSizePx, y)
+        Direction.DOWN -> Offset(x, y - cellSizePx)
+        Direction.LEFT -> Offset(x + cellSizePx, y)
+        Direction.UP -> Offset(x, y + cellSizePx)
+    }
+}
+
+private fun calculatePivotOffset(
+    rotationDirection: RotationDirection,
+    previousDirection: Direction,
+    x: Float,
+    y: Float,
+    cellSizePx: Float
+): Offset {
+    return when (rotationDirection) {
+        RotationDirection.CLOCKWISE -> when (previousDirection) {
+            Direction.RIGHT -> Offset(x, y + cellSizePx)
+            Direction.DOWN -> Offset(x, y)
+            Direction.LEFT -> Offset(x + cellSizePx, y)
+            Direction.UP -> Offset(x + cellSizePx, y + cellSizePx)
+        }
+
+        RotationDirection.COUNTER_CLOCKWISE -> when (previousDirection) {
+            Direction.LEFT -> Offset(x + cellSizePx, y + cellSizePx)
+            Direction.DOWN -> Offset(x + cellSizePx, y)
+            Direction.RIGHT -> Offset(x, y)
+            Direction.UP -> Offset(x, y + cellSizePx)
+        }
+
+        RotationDirection.NO_ROTATION -> when (previousDirection) {
+            Direction.RIGHT -> Offset(x, y)
+            Direction.DOWN -> Offset(x, y)
+            Direction.LEFT -> Offset(x, y)
+            Direction.UP -> Offset(x, y)
         }
     }
 }

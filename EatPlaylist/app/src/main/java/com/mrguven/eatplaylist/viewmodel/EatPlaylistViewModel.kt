@@ -1,6 +1,7 @@
 package com.mrguven.eatplaylist.viewmodel
 
 import android.graphics.Bitmap
+import android.graphics.Matrix
 import androidx.compose.runtime.MutableIntState
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableIntStateOf
@@ -11,6 +12,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.mrguven.eatplaylist.data.model.Direction
+import com.mrguven.eatplaylist.data.model.RotationDirection
 import com.mrguven.eatplaylist.data.model.SnakeUnit
 import kotlinx.coroutines.launch
 
@@ -74,35 +76,98 @@ class EatPlaylistViewModel : ViewModel() {
     }
 
     private fun growSnake() {
-        _snakeUnits.add(_targetSnakeUnit.value)
+        val lastUnit = _snakeUnits.last()
+        val newUnit = _targetSnakeUnit.value.copy()
+        newUnit.previousDirection = lastUnit.direction
+        newUnit.direction = lastUnit.direction
+        _snakeUnits.add(newUnit)
     }
 
     private fun updateSnake() {
         if (_snakeUnits.isEmpty()) return
+        val previousHead = _snakeUnits.first()
+        updateSnakeHead()
+        updateSnakeBody(previousHead)
+    }
 
+    private fun updateSnakeHead() {
         val head = _snakeUnits.first()
         val newHeadDirection = _currentDirection.value
         val newHeadIndex = calculateNewIndex(head.index, newHeadDirection)
+
         _snakeUnits[0] = head.copy(
             previousDirection = head.direction,
             direction = newHeadDirection,
+            rotationDirection = detect90DegreeTurn(head.direction, newHeadDirection),
             index = newHeadIndex
         )
+    }
 
-        var previousUnitIndex = head.index
-        var previousUnitDirection = newHeadDirection
+    private fun updateSnakeBody(previousHead: SnakeUnit) {
+        var previousUnitIndex = previousHead.index
+        var previousUnitDirection = _currentDirection.value
 
         for (i in 1 until _snakeUnits.size) {
             val currentUnit = _snakeUnits[i]
+            val rotatedBitmap = rotateBitmapBasedOnDirection(currentUnit)
 
             _snakeUnits[i] = currentUnit.copy(
                 previousDirection = currentUnit.direction,
+                direction = previousUnitDirection,
+                rotationDirection = detect90DegreeTurn(
+                    currentUnit.previousDirection,
+                    currentUnit.direction
+                ),
                 index = previousUnitIndex,
-                direction = previousUnitDirection
+                imageBitmap = rotatedBitmap
             )
 
             previousUnitIndex = currentUnit.index
             previousUnitDirection = currentUnit.direction
+        }
+    }
+
+    private fun rotateBitmapBasedOnDirection(unit: SnakeUnit): Bitmap {
+        return when (unit.rotationDirection) {
+            RotationDirection.CLOCKWISE -> rotateBitmap(unit.imageBitmap, 90f)
+            RotationDirection.COUNTER_CLOCKWISE -> rotateBitmap(unit.imageBitmap, -90f)
+            RotationDirection.NO_ROTATION -> unit.imageBitmap
+        }
+    }
+
+    private fun rotateBitmap(bitmap: Bitmap, angle: Float): Bitmap {
+        val matrix = Matrix().apply { postRotate(angle) }
+        return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+    }
+
+    private fun detect90DegreeTurn(
+        previousPreviousDirection: Direction,
+        previousDirection: Direction
+    ): RotationDirection {
+        return when (previousPreviousDirection) {
+            Direction.UP -> when (previousDirection) {
+                Direction.RIGHT -> RotationDirection.CLOCKWISE
+                Direction.LEFT -> RotationDirection.COUNTER_CLOCKWISE
+                else -> RotationDirection.NO_ROTATION
+            }
+
+            Direction.RIGHT -> when (previousDirection) {
+                Direction.DOWN -> RotationDirection.CLOCKWISE
+                Direction.UP -> RotationDirection.COUNTER_CLOCKWISE
+                else -> RotationDirection.NO_ROTATION
+            }
+
+            Direction.DOWN -> when (previousDirection) {
+                Direction.LEFT -> RotationDirection.CLOCKWISE
+                Direction.RIGHT -> RotationDirection.COUNTER_CLOCKWISE
+                else -> RotationDirection.NO_ROTATION
+            }
+
+            Direction.LEFT -> when (previousDirection) {
+                Direction.UP -> RotationDirection.CLOCKWISE
+                Direction.DOWN -> RotationDirection.COUNTER_CLOCKWISE
+                else -> RotationDirection.NO_ROTATION
+            }
         }
     }
 
