@@ -354,41 +354,44 @@ fun DrawTargetSnakeUnit(
     val cellSizePx = dpToPx(cellSize)
     val (x, y) = calculateCanvasCoordinates(snakeUnit.index, horizontalFactor, cellSizePx)
 
-    val scaleFraction by rememberInfiniteTransition(label = "Pulsating Animation").animateFloat(
-        initialValue = 1f, targetValue = 0.9f,
+    val transition = rememberInfiniteTransition(label = "Pulsating Animation")
+    val scaleFraction by transition.animateFloat(
+        initialValue = 1f,
+        targetValue = 0.85f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 600, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
+            animation = tween(durationMillis = EFFECT_MILLISECOND, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
         ), label = "Scale Animation"
     )
 
     Canvas(modifier = Modifier.size(cellSize)) {
         val scaledCellSizePx = cellSizePx * scaleFraction
         val offset = Offset(
-            x = x + (cellSize.toPx() - scaledCellSizePx) / 2,
-            y = y + (cellSize.toPx() - scaledCellSizePx) / 2
+            x = x + (cellSizePx - scaledCellSizePx) / 2,
+            y = y + (cellSizePx - scaledCellSizePx) / 2
         )
-        snakeUnit.imageBitmap.let { imageBitmap ->
-            val roundedRect = RoundRect(
-                left = offset.x,
-                top = offset.y,
-                right = offset.x + scaledCellSizePx,
-                bottom = offset.y + scaledCellSizePx,
-                cornerRadius = CornerRadius(10f, 10f)
+
+        val roundedRect = RoundRect(
+            left = offset.x,
+            top = offset.y,
+            right = offset.x + scaledCellSizePx,
+            bottom = offset.y + scaledCellSizePx,
+            cornerRadius = CornerRadius(10f, 10f)
+        )
+        val path = Path().apply {
+            addRoundRect(roundRect = roundedRect, Path.Direction.Clockwise)
+        }
+
+        with(drawContext.canvas) {
+            clipPath(path)
+            drawImageRect(
+                image = snakeUnit.imageBitmap.asImageBitmap(),
+                paint = Paint(),
+                dstOffset = IntOffset(offset.x.toInt(), offset.y.toInt()),
+                dstSize = IntSize(scaledCellSizePx.toInt(), scaledCellSizePx.toInt()),
+                srcOffset = IntOffset.Zero,
+                srcSize = IntSize(snakeUnit.imageBitmap.width, snakeUnit.imageBitmap.height)
             )
-            val path =
-                Path().apply { addRoundRect(roundRect = roundedRect, Path.Direction.Clockwise) }
-            with(drawContext.canvas) {
-                clipPath(path)
-                drawImageRect(
-                    image = imageBitmap.asImageBitmap(),
-                    paint = Paint(),
-                    dstOffset = IntOffset(offset.x.toInt(), offset.y.toInt()),
-                    dstSize = IntSize(scaledCellSizePx.toInt(), scaledCellSizePx.toInt()),
-                    srcOffset = IntOffset.Zero,
-                    srcSize = IntSize(imageBitmap.width, imageBitmap.height)
-                )
-            }
         }
     }
 }
