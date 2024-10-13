@@ -54,8 +54,7 @@ import com.mrguven.eatplaylist.viewmodel.EatPlaylistViewModel
 import kotlinx.coroutines.delay
 import kotlin.math.absoluteValue
 
-const val EFFECT_MILLISECOND = 400
-const val ANIMATION_MILLISECOND = 500
+const val EFFECT_MILLISECOND = 300
 
 @Composable
 fun GameScreen(
@@ -156,9 +155,20 @@ fun DrawSnakeHead(
             )
         }
 
+    val animatedX by animateFloatAsState(
+        targetValue = adjustedX,
+        animationSpec = tween(durationMillis = EFFECT_MILLISECOND, easing = LinearEasing),
+        label = "Animated Snake Body X Position"
+    )
+    val animatedY by animateFloatAsState(
+        targetValue = adjustedY,
+        animationSpec = tween(durationMillis = EFFECT_MILLISECOND, easing = LinearEasing),
+        label = "Animated Snake Body Y Position"
+    )
+
     when (snakeUnit.rotationDirection) {
         RotationDirection.NO_ROTATION ->
-            DrawStaticSnakeHead(adjustedX, adjustedY, snakeUnit.direction, cellSizePx)
+            DrawStaticSnakeHead(animatedX, animatedY, snakeUnit.direction, cellSizePx)
 
         else ->
             DrawRotatedSnakeHead(
@@ -239,9 +249,20 @@ fun DrawSnakeBody(
         )
     }
 
+    val animatedX by animateFloatAsState(
+        targetValue = x,
+        animationSpec = tween(durationMillis = EFFECT_MILLISECOND, easing = LinearEasing),
+        label = "Animated Snake Body X Position"
+    )
+    val animatedY by animateFloatAsState(
+        targetValue = y,
+        animationSpec = tween(durationMillis = EFFECT_MILLISECOND, easing = LinearEasing),
+        label = "Animated Snake Body Y Position"
+    )
+
     when (snakeUnit.rotationDirection) {
         RotationDirection.NO_ROTATION ->
-            DrawStaticImage(snakeUnit.imageBitmap, Offset(x, y), cellSizePx)
+            DrawStaticImage(snakeUnit.imageBitmap, Offset(animatedX, animatedY), cellSizePx)
 
         else ->
             DrawRotatedImage(
