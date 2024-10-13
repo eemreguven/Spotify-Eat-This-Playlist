@@ -6,5 +6,6 @@ data class SnakeUnit(
     var index: Int = 0,
     var direction: Direction = Direction.RIGHT,
     var previousDirection: Direction = Direction.RIGHT,
-    var imageBitmap: Bitmap = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
+    var rotationDirection: RotationDirection = RotationDirection.NO_ROTATION,
+    var imageBitmap: Bitmap = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888),
 )
