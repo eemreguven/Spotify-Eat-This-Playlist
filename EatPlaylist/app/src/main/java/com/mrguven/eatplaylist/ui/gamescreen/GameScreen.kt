@@ -1,6 +1,7 @@
 package com.mrguven.eatplaylist.ui.gamescreen
 
 import android.graphics.Bitmap
+import androidx.activity.ComponentActivity
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -35,13 +36,16 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.palette.graphics.Palette
 import com.mrguven.eatplaylist.data.model.Direction
 import com.mrguven.eatplaylist.data.model.RotationDirection
@@ -80,10 +84,13 @@ fun DrawGameScreen(modifier: Modifier, viewModel: EatPlaylistViewModel) {
     }
 
     val backgroundColor by animateColorAsState(
-        targetColor, animationSpec = tween(
-            durationMillis = EFFECT_MILLISECOND, easing = LinearEasing
+        targetValue = targetColor,
+        animationSpec = tween(
+            durationMillis = EFFECT_MILLISECOND,
+            easing = LinearEasing
         ), label = "GameScreen Background Color"
     )
+    UpdateSystemBarsColor(backgroundColor)
 
     Box(
         modifier = modifier
@@ -410,6 +417,23 @@ fun getPaddingAdjustedCoordinates(x: Float, y: Float, direction: Direction): Pai
 @Composable
 fun dpToPx(dp: Dp): Float {
     return with(LocalDensity.current) { dp.toPx() }
+}
+
+@Composable
+fun UpdateSystemBarsColor(backgroundColor: Color) {
+    val activity = LocalContext.current as ComponentActivity
+
+    LaunchedEffect(backgroundColor) {
+        val systemUiController =
+            WindowInsetsControllerCompat(activity.window, activity.window.decorView)
+
+        activity.window.statusBarColor = backgroundColor.toArgb()
+        activity.window.navigationBarColor = backgroundColor.toArgb()
+
+        val useDarkIcons = backgroundColor.luminance() > 0.5
+        systemUiController.isAppearanceLightStatusBars = useDarkIcons
+        systemUiController.isAppearanceLightNavigationBars = useDarkIcons
+    }
 }
 
 fun calculateCanvasCoordinates(
