@@ -40,8 +40,6 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -74,8 +72,7 @@ fun GameScreen(
 
 @Composable
 fun DrawGameScreen(modifier: Modifier, viewModel: EatPlaylistViewModel) {
-    val cellSize = viewModel.cellSize.value
-    val horizontalFactor = viewModel.columns.intValue
+    val cellSizePx = viewModel.cellSizePx.floatValue
     val targetSnakeUnit = viewModel.targetSnakeUnit.value
 
     val targetColor = remember(targetSnakeUnit) {
@@ -99,12 +96,12 @@ fun DrawGameScreen(modifier: Modifier, viewModel: EatPlaylistViewModel) {
             .handleDirectionDrag(viewModel)
     ) {
         if (targetSnakeUnit.index != viewModel.snakeUnits.first().index) {
-            DrawTargetSnakeUnit(targetSnakeUnit, horizontalFactor, cellSize)
+            DrawTargetSnakeUnit(targetSnakeUnit, cellSizePx)
         }
         viewModel.snakeUnits.drop(1).forEach { snakeUnit ->
-            DrawSnakeBody(snakeUnit, horizontalFactor, cellSize)
+            DrawSnakeBody(snakeUnit, cellSizePx)
         }
-        DrawSnakeHead(viewModel.snakeUnits.first(), horizontalFactor, cellSize)
+        DrawSnakeHead(viewModel.snakeUnits.first(), cellSizePx)
     }
 }
 
@@ -130,63 +127,41 @@ fun Modifier.handleDirectionDrag(
 
 @Composable
 fun DrawSnakeHead(
-    snakeUnit: SnakeUnit, horizontalFactor: Int, cellSize: Dp
+    snakeUnit: SnakeUnit, cellSizePx: Float
 ) {
-    val cellSizePx = dpToPx(cellSize)
-    val (x, y) = calculateCanvasCoordinates(snakeUnit.index, horizontalFactor, cellSizePx)
-    val (adjustedX, adjustedY) = getPaddingAdjustedCoordinates(x, y, snakeUnit.direction)
-
-    val targetRotationAngle = calculateRotationAngle(snakeUnit.rotationDirection)
+    val targetRotationAngle = snakeUnit.rotationAngle
     val rotationAngle by animateFloatAsState(
         targetValue = targetRotationAngle,
         animationSpec = tween(durationMillis = EFFECT_MILLISECOND / 2),
         label = "Snake Head Rotation Angle"
     )
 
-    val previousPosition =
-        remember(snakeUnit.rotationDirection, snakeUnit.direction, adjustedX, adjustedY) {
-            calculatePreviousPosition(snakeUnit.direction, adjustedX, adjustedY, cellSizePx)
-        }
-
-    val pivotOffset =
-        remember(snakeUnit.rotationDirection, snakeUnit.direction, adjustedX, adjustedY) {
-            calculatePivotOffset(
-                snakeUnit.rotationDirection, snakeUnit.direction, adjustedX, adjustedY, cellSizePx
-            )
-        }
-
     val animatedX by animateFloatAsState(
-        targetValue = adjustedX,
+        targetValue = snakeUnit.position.x,
         animationSpec = tween(durationMillis = EFFECT_MILLISECOND, easing = LinearEasing),
         label = "Animated Snake Body X Position"
     )
     val animatedY by animateFloatAsState(
-        targetValue = adjustedY,
+        targetValue = snakeUnit.position.y,
         animationSpec = tween(durationMillis = EFFECT_MILLISECOND, easing = LinearEasing),
         label = "Animated Snake Body Y Position"
     )
 
     when (snakeUnit.rotationDirection) {
         RotationDirection.NO_ROTATION ->
-            DrawStaticSnakeHead(animatedX, animatedY, snakeUnit.direction, cellSizePx)
+            DrawStaticSnakeHead(Offset(animatedX, animatedY), snakeUnit.direction, cellSizePx)
 
         else ->
-            DrawRotatedSnakeHead(
-                previousPosition,
-                rotationAngle,
-                pivotOffset,
-                snakeUnit.previousDirection,
-                cellSizePx
-            )
+            DrawRotatedSnakeHead(snakeUnit, rotationAngle, cellSizePx)
     }
 }
 
 @Composable
 private fun DrawStaticSnakeHead(
-    x: Float, y: Float, direction: Direction, cellSizePx: Float,
+    position: Offset, direction: Direction, cellSizePx: Float,
 ) {
     Canvas(modifier = Modifier.fillMaxSize()) {
-        val rect = Rect(Offset(x, y), Size(cellSizePx, cellSizePx))
+        val rect = Rect(position, Size(cellSizePx, cellSizePx))
         val trianglePath = createTrianglePath(rect, direction)
 
         drawIntoCanvas { canvas ->
@@ -200,18 +175,14 @@ private fun DrawStaticSnakeHead(
 
 @Composable
 private fun DrawRotatedSnakeHead(
-    previousPosition: Offset,
-    rotationAngle: Float,
-    pivotOffset: Offset,
-    previousDirection: Direction,
-    cellSizePx: Float,
+    snakeUnit: SnakeUnit, rotationAngle: Float, cellSizePx: Float,
 ) {
     Canvas(modifier = Modifier.fillMaxSize()) {
         val rect =
-            Rect(Offset(previousPosition.x, previousPosition.y), Size(cellSizePx, cellSizePx))
-        val trianglePath = createTrianglePath(rect, previousDirection)
+            Rect(snakeUnit.previousPosition, Size(cellSizePx, cellSizePx))
+        val trianglePath = createTrianglePath(rect, snakeUnit.previousDirection)
 
-        rotate(degrees = rotationAngle, pivot = pivotOffset) {
+        rotate(degrees = rotationAngle, pivot = snakeUnit.pivotOffset) {
             drawIntoCanvas { canvas ->
                 canvas.drawOutline(outline = Outline.Generic(trianglePath), paint = Paint().apply {
                     color = Color.White
@@ -224,38 +195,22 @@ private fun DrawRotatedSnakeHead(
 
 @Composable
 fun DrawSnakeBody(
-    snakeUnit: SnakeUnit, horizontalFactor: Int, cellSize: Dp
+    snakeUnit: SnakeUnit, cellSizePx: Float
 ) {
-    val cellSizePx = dpToPx(cellSize)
-    val (x, y) = remember(snakeUnit.index, horizontalFactor, cellSizePx) {
-        calculateCanvasCoordinates(snakeUnit.index, horizontalFactor, cellSizePx)
-    }
-
-    val targetRotationAngle = calculateRotationAngle(snakeUnit.rotationDirection)
+    val targetRotationAngle = snakeUnit.rotationAngle
     val rotationAngle by animateFloatAsState(
         targetValue = targetRotationAngle,
         animationSpec = tween(durationMillis = EFFECT_MILLISECOND / 2),
         label = "Snake Body Rotation Angle"
     )
 
-    val previousPosition =
-        remember(snakeUnit.rotationDirection, snakeUnit.previousDirection, x, y) {
-            calculatePreviousPosition(snakeUnit.previousDirection, x, y, cellSizePx)
-        }
-
-    val pivotOffset = remember(snakeUnit.rotationDirection, snakeUnit.previousDirection, x, y) {
-        calculatePivotOffset(
-            snakeUnit.rotationDirection, snakeUnit.previousDirection, x, y, cellSizePx
-        )
-    }
-
     val animatedX by animateFloatAsState(
-        targetValue = x,
+        targetValue = snakeUnit.position.x,
         animationSpec = tween(durationMillis = EFFECT_MILLISECOND, easing = LinearEasing),
         label = "Animated Snake Body X Position"
     )
     val animatedY by animateFloatAsState(
-        targetValue = y,
+        targetValue = snakeUnit.position.y,
         animationSpec = tween(durationMillis = EFFECT_MILLISECOND, easing = LinearEasing),
         label = "Animated Snake Body Y Position"
     )
@@ -265,9 +220,7 @@ fun DrawSnakeBody(
             DrawStaticImage(snakeUnit.imageBitmap, Offset(animatedX, animatedY), cellSizePx)
 
         else ->
-            DrawRotatedImage(
-                snakeUnit.imageBitmap, rotationAngle, pivotOffset, previousPosition, cellSizePx
-            )
+            DrawRotatedImage(snakeUnit, rotationAngle, cellSizePx)
     }
 }
 
@@ -295,22 +248,25 @@ private fun DrawStaticImage(
 
 @Composable
 private fun DrawRotatedImage(
-    bitmap: Bitmap, rotationAngle: Float, pivotOffset: Offset, position: Offset, cellSizePx: Float
+    snakeUnit: SnakeUnit, rotationAngle: Float, cellSizePx: Float
 ) {
     Canvas(modifier = Modifier.size(cellSizePx.dp)) {
-        val roundedRect = createRoundedRect(position, cellSizePx)
+        val roundedRect = createRoundedRect(snakeUnit.previousPosition, cellSizePx)
         val path = Path().apply { addRoundRect(roundedRect, Path.Direction.Clockwise) }
 
-        rotate(degrees = rotationAngle, pivot = pivotOffset) {
+        rotate(degrees = rotationAngle, pivot = snakeUnit.pivotOffset) {
             with(drawContext.canvas) {
                 clipPath(path)
                 drawImageRect(
-                    image = bitmap.asImageBitmap(),
+                    image = snakeUnit.imageBitmap.asImageBitmap(),
                     paint = Paint(),
-                    dstOffset = IntOffset(position.x.toInt(), position.y.toInt()),
+                    dstOffset = IntOffset(
+                        snakeUnit.previousPosition.x.toInt(),
+                        snakeUnit.previousPosition.y.toInt()
+                    ),
                     dstSize = IntSize(cellSizePx.toInt(), cellSizePx.toInt()),
                     srcOffset = IntOffset.Zero,
-                    srcSize = IntSize(bitmap.width, bitmap.height)
+                    srcSize = IntSize(snakeUnit.imageBitmap.width, snakeUnit.imageBitmap.height)
                 )
             }
         }
@@ -325,63 +281,10 @@ private fun createRoundedRect(position: Offset, cellSizePx: Float) = RoundRect(
     cornerRadius = CornerRadius(10f, 10f)
 )
 
-fun calculateRotationAngle(rotationDirection: RotationDirection): Float {
-    return when (rotationDirection) {
-        RotationDirection.CLOCKWISE -> 90f
-        RotationDirection.COUNTER_CLOCKWISE -> -90f
-        RotationDirection.NO_ROTATION -> 0f
-    }
-}
-
-private fun calculatePreviousPosition(
-    previousDirection: Direction, x: Float, y: Float, cellSizePx: Float
-): Offset {
-    return when (previousDirection) {
-        Direction.RIGHT -> Offset(x - cellSizePx, y)
-        Direction.DOWN -> Offset(x, y - cellSizePx)
-        Direction.LEFT -> Offset(x + cellSizePx, y)
-        Direction.UP -> Offset(x, y + cellSizePx)
-    }
-}
-
-private fun calculatePivotOffset(
-    rotationDirection: RotationDirection,
-    previousDirection: Direction,
-    x: Float,
-    y: Float,
-    cellSizePx: Float
-): Offset {
-    return when (rotationDirection) {
-        RotationDirection.CLOCKWISE -> when (previousDirection) {
-            Direction.RIGHT -> Offset(x, y + cellSizePx)
-            Direction.DOWN -> Offset(x, y)
-            Direction.LEFT -> Offset(x + cellSizePx, y)
-            Direction.UP -> Offset(x + cellSizePx, y + cellSizePx)
-        }
-
-        RotationDirection.COUNTER_CLOCKWISE -> when (previousDirection) {
-            Direction.LEFT -> Offset(x + cellSizePx, y + cellSizePx)
-            Direction.DOWN -> Offset(x + cellSizePx, y)
-            Direction.RIGHT -> Offset(x, y)
-            Direction.UP -> Offset(x, y + cellSizePx)
-        }
-
-        RotationDirection.NO_ROTATION -> when (previousDirection) {
-            Direction.RIGHT -> Offset(x, y)
-            Direction.DOWN -> Offset(x, y)
-            Direction.LEFT -> Offset(x, y)
-            Direction.UP -> Offset(x, y)
-        }
-    }
-}
-
 @Composable
 fun DrawTargetSnakeUnit(
-    snakeUnit: SnakeUnit, horizontalFactor: Int, cellSize: Dp
+    snakeUnit: SnakeUnit, cellSizePx: Float
 ) {
-    val cellSizePx = dpToPx(cellSize)
-    val (x, y) = calculateCanvasCoordinates(snakeUnit.index, horizontalFactor, cellSizePx)
-
     val transition = rememberInfiniteTransition(label = "Pulsating Animation")
     val scaleFraction by transition.animateFloat(
         initialValue = 1f,
@@ -392,11 +295,11 @@ fun DrawTargetSnakeUnit(
         ), label = "Scale Animation"
     )
 
-    Canvas(modifier = Modifier.size(cellSize)) {
+    Canvas(modifier = Modifier.size(cellSizePx.dp)) {
         val scaledCellSizePx = cellSizePx * scaleFraction
         val offset = Offset(
-            x = x + (cellSizePx - scaledCellSizePx) / 2,
-            y = y + (cellSizePx - scaledCellSizePx) / 2
+            x = snakeUnit.position.x + (cellSizePx - scaledCellSizePx) / 2,
+            y = snakeUnit.position.y + (cellSizePx - scaledCellSizePx) / 2
         )
 
         val roundedRect = RoundRect(
@@ -425,22 +328,6 @@ fun DrawTargetSnakeUnit(
 }
 
 @Composable
-fun getPaddingAdjustedCoordinates(x: Float, y: Float, direction: Direction): Pair<Float, Float> {
-    val padding = dpToPx(dp = 2.dp)
-    return when (direction) {
-        Direction.RIGHT -> x + padding to y
-        Direction.LEFT -> x - padding to y
-        Direction.UP -> x to y - padding
-        Direction.DOWN -> x to y + padding
-    }
-}
-
-@Composable
-fun dpToPx(dp: Dp): Float {
-    return with(LocalDensity.current) { dp.toPx() }
-}
-
-@Composable
 fun UpdateSystemBarsColor(backgroundColor: Color) {
     val activity = LocalContext.current as ComponentActivity
 
@@ -455,14 +342,6 @@ fun UpdateSystemBarsColor(backgroundColor: Color) {
         systemUiController.isAppearanceLightStatusBars = useDarkIcons
         systemUiController.isAppearanceLightNavigationBars = useDarkIcons
     }
-}
-
-fun calculateCanvasCoordinates(
-    index: Int, horizontalFactor: Int, cellSizePx: Float
-): Pair<Float, Float> {
-    val x = (index % horizontalFactor) * cellSizePx
-    val y = (index / horizontalFactor) * cellSizePx
-    return Pair(x, y)
 }
 
 fun calculateAverageColor(bitmap: Bitmap): Color {

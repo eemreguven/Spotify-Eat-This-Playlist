@@ -14,6 +14,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.mrguven.eatplaylist.ui.gamescreen.GameScreen
 import com.mrguven.eatplaylist.ui.theme.EatPlaylistTheme
@@ -109,7 +111,12 @@ class MainActivity : ComponentActivity() {
         val cellSize = 32.dp
         val columns = floor(screenWidthDp / cellSize).toInt()
         val rows = floor(screenHeightDp / cellSize).toInt()
+        val cellSizePx = dpToPx(dp = cellSize)
+        gameViewModel.initGridData(rows, columns, cellSizePx)
+    }
 
-        gameViewModel.initUiData(rows, columns, cellSize)
+    @Composable
+    fun dpToPx(dp: Dp): Float {
+        return with(LocalDensity.current) { dp.toPx() }
     }
 }
