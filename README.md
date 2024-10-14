@@ -1,7 +1,8 @@
-
 # Spotify-Eat-This-Playlist
 
 This project recreates a specific feature of the Spotify app using Jetpack Compose. Connect your Spotify App's player state and change music when the snake grows. The app dynamically changes based on the current player state from Spotify, adapting to the music being played in real time.
+
+https://github.com/user-attachments/assets/1cc2e3c1-36d4-42ae-8561-08c2dac0bfa1
 
 ## Usage
 
