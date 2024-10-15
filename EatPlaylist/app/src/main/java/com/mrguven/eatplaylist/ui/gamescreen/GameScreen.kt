@@ -62,9 +62,11 @@ fun GameScreen(
         onCurrentSongEaten()
     }
 
-    LaunchedEffect(viewModel.snakeUnits.first()) {
-        delay(EFFECT_MILLISECOND.toLong())
-        viewModel.moveSnake()
+    LaunchedEffect(Unit) {
+        while (true) {
+            viewModel.moveSnake()
+            delay(EFFECT_MILLISECOND.toLong())
+        }
     }
 
     DrawGameScreen(modifier = modifier, viewModel = viewModel)
@@ -132,7 +134,7 @@ fun DrawSnakeHead(
     val targetRotationAngle = snakeUnit.rotationAngle
     val rotationAngle by animateFloatAsState(
         targetValue = targetRotationAngle,
-        animationSpec = tween(durationMillis = EFFECT_MILLISECOND / 2),
+        animationSpec = tween(durationMillis = EFFECT_MILLISECOND, easing = LinearEasing),
         label = "Snake Head Rotation Angle"
     )
 
@@ -200,7 +202,7 @@ fun DrawSnakeBody(
     val targetRotationAngle = snakeUnit.rotationAngle
     val rotationAngle by animateFloatAsState(
         targetValue = targetRotationAngle,
-        animationSpec = tween(durationMillis = EFFECT_MILLISECOND / 2),
+        animationSpec = tween(durationMillis = EFFECT_MILLISECOND, easing = LinearEasing),
         label = "Snake Body Rotation Angle"
     )
 
