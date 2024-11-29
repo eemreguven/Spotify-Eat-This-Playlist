@@ -1,4 +1,4 @@
-package com.mrguven.eatplaylist.ui.gamescreen
+package com.mrguven.eatplaylist.ui.game
 
 import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
@@ -44,21 +44,26 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.palette.graphics.Palette
 import com.mrguven.eatplaylist.data.model.Direction
 import com.mrguven.eatplaylist.data.model.RotationDirection
 import com.mrguven.eatplaylist.data.model.SnakeUnit
-import com.mrguven.eatplaylist.viewmodel.EatPlaylistViewModel
 import kotlinx.coroutines.delay
 import kotlin.math.absoluteValue
 
-const val EFFECT_MILLISECOND = 300
+const val EFFECT_MILLISECOND = 250
 
 @Composable
 fun GameScreen(
-    modifier: Modifier, viewModel: EatPlaylistViewModel, onCurrentSongEaten: () -> Unit
+    modifier: Modifier, viewModel: GameViewModel, onCurrentSongEaten: () -> Unit
 ) {
-    LaunchedEffect(viewModel.snakeUnits.size) {
+    val uiState = viewModel.uiState.collectAsStateWithLifecycle()
+    val cellSizePx = uiState.value.cellSizePx
+    val targetSnakeUnit = uiState.value.targetSnakeUnit
+    val snakeUnits = uiState.value.snakeUnits
+
+    LaunchedEffect(snakeUnits.size) {
         onCurrentSongEaten()
     }
 
@@ -69,14 +74,21 @@ fun GameScreen(
         }
     }
 
-    DrawGameScreen(modifier = modifier, viewModel = viewModel)
+    DrawGameScreen(
+        modifier = modifier.handleDirectionDrag(viewModel),
+        snakeUnits,
+        targetSnakeUnit,
+        cellSizePx
+    )
 }
 
 @Composable
-fun DrawGameScreen(modifier: Modifier, viewModel: EatPlaylistViewModel) {
-    val cellSizePx = viewModel.cellSizePx.floatValue
-    val targetSnakeUnit = viewModel.targetSnakeUnit.value
-
+fun DrawGameScreen(
+    modifier: Modifier,
+    snakeUnits: List<SnakeUnit>,
+    targetSnakeUnit: SnakeUnit,
+    cellSizePx: Float
+) {
     val targetColor = remember(targetSnakeUnit) {
         calculateAverageColor(targetSnakeUnit.imageBitmap).copy(0.6f)
     }
@@ -95,20 +107,19 @@ fun DrawGameScreen(modifier: Modifier, viewModel: EatPlaylistViewModel) {
             .fillMaxSize()
             .background(backgroundColor)
             .padding(5.dp)
-            .handleDirectionDrag(viewModel)
     ) {
-        if (targetSnakeUnit.index != viewModel.snakeUnits.first().index) {
+        if (targetSnakeUnit.index != snakeUnits.first().index) {
             DrawTargetSnakeUnit(targetSnakeUnit, cellSizePx)
         }
-        viewModel.snakeUnits.drop(1).forEach { snakeUnit ->
+        snakeUnits.drop(1).forEach { snakeUnit ->
             DrawSnakeBody(snakeUnit, cellSizePx)
         }
-        DrawSnakeHead(viewModel.snakeUnits.first(), cellSizePx)
+        DrawSnakeHead(snakeUnits.first(), cellSizePx)
     }
 }
 
 fun Modifier.handleDirectionDrag(
-    viewModel: EatPlaylistViewModel, threshold: Float = 5f
+    viewModel: GameViewModel, threshold: Float = 5f
 ): Modifier {
     return pointerInput(Unit) {
         detectDragGestures(onDragEnd = { }, onDragStart = { }, onDrag = { change, dragAmount ->

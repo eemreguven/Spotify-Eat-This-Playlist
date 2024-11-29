@@ -1,11 +1,8 @@
-package com.mrguven.eatplaylist.viewmodel
+package com.mrguven.eatplaylist.ui.game
 
 import android.graphics.Bitmap
 import android.graphics.Matrix
-import androidx.compose.runtime.MutableState
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.geometry.Offset
 import androidx.lifecycle.ViewModel
@@ -13,26 +10,21 @@ import androidx.lifecycle.viewModelScope
 import com.mrguven.eatplaylist.data.model.Direction
 import com.mrguven.eatplaylist.data.model.RotationDirection
 import com.mrguven.eatplaylist.data.model.SnakeUnit
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
-class EatPlaylistViewModel : ViewModel() {
+class GameViewModel : ViewModel() {
     private var _columns = mutableIntStateOf(0)
     private var _rows = mutableIntStateOf(0)
-
-    private var _cellSizePx = mutableFloatStateOf(0f)
-    val cellSizePx = _cellSizePx
-
     private var _currentDirection = mutableStateOf(Direction.RIGHT)
 
-    private val _snakeUnits = mutableStateListOf<SnakeUnit>()
-    val snakeUnits: List<SnakeUnit> = _snakeUnits
-
-    private var _targetSnakeUnit = mutableStateOf(SnakeUnit())
-    val targetSnakeUnit: MutableState<SnakeUnit> = _targetSnakeUnit
+    private val _uiState = MutableStateFlow(GameUiState())
+    val uiState: StateFlow<GameUiState> = _uiState
 
     fun generateNewTarget(newBitmap: Bitmap) {
         viewModelScope.launch {
-            if (!newBitmap.sameAs(_targetSnakeUnit.value.imageBitmap)) {
+            if (!newBitmap.sameAs(_uiState.value.targetSnakeUnit.imageBitmap)) {
                 val targetIndex = generateNewTargetIndex()
                 val position = calculateCanvasPosition(targetIndex)
                 val newSnakeUnit =
@@ -43,14 +35,14 @@ class EatPlaylistViewModel : ViewModel() {
                         previousPosition = position,
                         pivotOffset = position
                     )
-                _targetSnakeUnit.value = newSnakeUnit
+                _uiState.value = _uiState.value.copy(targetSnakeUnit = newSnakeUnit)
             }
         }
     }
 
     private fun generateNewTargetIndex(): Int {
         return (0 until _rows.intValue * _columns.intValue).filterNot { index ->
-            snakeUnits.any { it.index == index }
+            _uiState.value.snakeUnits.any { it.index == index }
         }.random()
     }
 
@@ -64,7 +56,9 @@ class EatPlaylistViewModel : ViewModel() {
                     (dir1 == Direction.RIGHT && dir2 == Direction.LEFT)
         }
 
-        if (_snakeUnits.size == 1 || !isOppositeDirection(newDirection, currentDirection)) {
+        if (_uiState.value.snakeUnits.size == 1
+            || !isOppositeDirection(newDirection, currentDirection)
+        ) {
             _currentDirection.value = newDirection
         }
     }
@@ -72,29 +66,32 @@ class EatPlaylistViewModel : ViewModel() {
     fun moveSnake() {
         updateSnake()
 
-        val head = snakeUnits.firstOrNull()
-        if (head != null && head.index == targetSnakeUnit.value.index) {
+        val head = _uiState.value.snakeUnits.firstOrNull()
+        if (head != null && head.index == _uiState.value.targetSnakeUnit.index) {
             growSnake()
         }
     }
 
     private fun growSnake() {
-        val lastUnit = _snakeUnits.last()
-        val newUnit = _targetSnakeUnit.value.copy()
+        val lastUnit = _uiState.value.snakeUnits.last()
+        val newUnit = _uiState.value.targetSnakeUnit.copy()
         newUnit.previousDirection = lastUnit.direction
         newUnit.direction = lastUnit.direction
-        _snakeUnits.add(newUnit)
+        _uiState.value = _uiState.value.copy(
+            snakeUnits = _uiState.value.snakeUnits + listOf(newUnit)
+        )
     }
 
     private fun updateSnake() {
-        if (_snakeUnits.isEmpty()) return
-        val previousHead = _snakeUnits.first()
-        updateSnakeHead()
-        updateSnakeBody(previousHead)
+        if (_uiState.value.snakeUnits.isEmpty()) return
+        val previousHead = _uiState.value.snakeUnits.first()
+        val headUnit = updateSnakeHead()
+        val bodyUnitList = updateSnakeBody(previousHead)
+        _uiState.value = _uiState.value.copy(snakeUnits = listOf(headUnit) + bodyUnitList)
     }
 
-    private fun updateSnakeHead() {
-        val head = _snakeUnits.first()
+    private fun updateSnakeHead(): SnakeUnit {
+        val head = _uiState.value.snakeUnits.first()
         val newDirection = _currentDirection.value
         val newHeadIndex = calculateNewIndex(head.index, newDirection)
 
@@ -109,7 +106,7 @@ class EatPlaylistViewModel : ViewModel() {
         val pivotOffset =
             calculatePivotOffset(rotationDirection, newDirection, paddingAdjustedPosition)
 
-        _snakeUnits[0] = head.copy(
+        val headUnit = head.copy(
             index = newHeadIndex,
             position = paddingAdjustedPosition,
             previousPosition = previousPosition,
@@ -119,15 +116,16 @@ class EatPlaylistViewModel : ViewModel() {
             rotationAngle = rotationAngle,
             pivotOffset = pivotOffset
         )
+        return headUnit
     }
 
-    private fun updateSnakeBody(previousHead: SnakeUnit) {
+    private fun updateSnakeBody(previousHead: SnakeUnit): List<SnakeUnit> {
         var newIndex = previousHead.index
         var newDirection = _currentDirection.value
+        val bodyUnitList = mutableListOf<SnakeUnit>()
 
-        for (i in 1 until _snakeUnits.size) {
-            val currentUnit = _snakeUnits[i]
-
+        for (i in 1 until _uiState.value.snakeUnits.size) {
+            val currentUnit = _uiState.value.snakeUnits[i]
             val previousDirection = currentUnit.direction
             val newPosition = calculateCanvasPosition(newIndex)
             val previousPosition = calculatePreviousPosition(previousDirection, newPosition)
@@ -139,20 +137,23 @@ class EatPlaylistViewModel : ViewModel() {
                 calculatePivotOffset(rotationDirection, previousDirection, newPosition)
             val rotatedBitmap = rotateBitmapBasedOnDirection(currentUnit)
 
-            _snakeUnits[i] = currentUnit.copy(
-                index = newIndex,
-                position = newPosition,
-                previousPosition = previousPosition,
-                direction = newDirection,
-                previousDirection = previousDirection,
-                rotationDirection = rotationDirection,
-                imageBitmap = rotatedBitmap,
-                pivotOffset = pivotOffset,
-                rotationAngle = rotationAngle
+            bodyUnitList.add(
+                currentUnit.copy(
+                    index = newIndex,
+                    position = newPosition,
+                    previousPosition = previousPosition,
+                    direction = newDirection,
+                    previousDirection = previousDirection,
+                    rotationDirection = rotationDirection,
+                    imageBitmap = rotatedBitmap,
+                    pivotOffset = pivotOffset,
+                    rotationAngle = rotationAngle
+                )
             )
             newIndex = currentUnit.index
             newDirection = currentUnit.direction
         }
+        return bodyUnitList
     }
 
     private fun rotateBitmapBasedOnDirection(unit: SnakeUnit): Bitmap {
@@ -200,8 +201,9 @@ class EatPlaylistViewModel : ViewModel() {
     }
 
     private fun calculateCanvasPosition(index: Int): Offset {
-        val x = (index % _columns.intValue) * cellSizePx.floatValue
-        val y = (index / _columns.intValue) * cellSizePx.floatValue
+        val x = (index % _columns.intValue) * _uiState.value.cellSizePx
+        _uiState.value.cellSizePx
+        val y = (index / _columns.intValue) * _uiState.value.cellSizePx
         return Offset(x, y)
     }
 
@@ -209,7 +211,7 @@ class EatPlaylistViewModel : ViewModel() {
         position: Offset,
         direction: Direction
     ): Offset {
-        val padding = _cellSizePx.floatValue / 10
+        val padding = _uiState.value.cellSizePx / 10
         return when (direction) {
             Direction.RIGHT -> Offset(position.x + padding, position.y)
             Direction.LEFT -> Offset(position.x - padding, position.y)
@@ -230,10 +232,10 @@ class EatPlaylistViewModel : ViewModel() {
         previousDirection: Direction, position: Offset,
     ): Offset {
         return when (previousDirection) {
-            Direction.RIGHT -> Offset(position.x - cellSizePx.floatValue, position.y)
-            Direction.DOWN -> Offset(position.x, position.y - cellSizePx.floatValue)
-            Direction.LEFT -> Offset(position.x + cellSizePx.floatValue, position.y)
-            Direction.UP -> Offset(position.x, position.y + cellSizePx.floatValue)
+            Direction.RIGHT -> Offset(position.x - _uiState.value.cellSizePx, position.y)
+            Direction.DOWN -> Offset(position.x, position.y - _uiState.value.cellSizePx)
+            Direction.LEFT -> Offset(position.x + _uiState.value.cellSizePx, position.y)
+            Direction.UP -> Offset(position.x, position.y + _uiState.value.cellSizePx)
         }
     }
 
@@ -244,24 +246,24 @@ class EatPlaylistViewModel : ViewModel() {
     ): Offset {
         return when (rotationDirection) {
             RotationDirection.CLOCKWISE -> when (previousDirection) {
-                Direction.RIGHT -> Offset(position.x, position.y + cellSizePx.floatValue)
+                Direction.RIGHT -> Offset(position.x, position.y + _uiState.value.cellSizePx)
                 Direction.DOWN -> Offset(position.x, position.y)
-                Direction.LEFT -> Offset(position.x + cellSizePx.floatValue, position.y)
+                Direction.LEFT -> Offset(position.x + _uiState.value.cellSizePx, position.y)
                 Direction.UP -> Offset(
-                    position.x + cellSizePx.floatValue,
-                    position.y + cellSizePx.floatValue
+                    position.x + _uiState.value.cellSizePx,
+                    position.y + _uiState.value.cellSizePx
                 )
             }
 
             RotationDirection.COUNTER_CLOCKWISE -> when (previousDirection) {
                 Direction.LEFT -> Offset(
-                    position.x + cellSizePx.floatValue,
-                    position.y + cellSizePx.floatValue
+                    position.x + _uiState.value.cellSizePx,
+                    position.y + _uiState.value.cellSizePx
                 )
 
-                Direction.DOWN -> Offset(position.x + cellSizePx.floatValue, position.y)
+                Direction.DOWN -> Offset(position.x + _uiState.value.cellSizePx, position.y)
                 Direction.RIGHT -> Offset(position.x, position.y)
-                Direction.UP -> Offset(position.x, position.y + cellSizePx.floatValue)
+                Direction.UP -> Offset(position.x, position.y + _uiState.value.cellSizePx)
             }
 
             RotationDirection.NO_ROTATION -> when (previousDirection) {
@@ -301,13 +303,12 @@ class EatPlaylistViewModel : ViewModel() {
     fun initGridData(rows: Int, columns: Int, cellSizePx: Float) {
         _rows.intValue = rows
         _columns.intValue = columns
-        _cellSizePx.floatValue = cellSizePx
+        _uiState.value = _uiState.value.copy(cellSizePx = cellSizePx)
         initSnakeData()
     }
 
     private fun initSnakeData() {
         val snakeHead = SnakeUnit()
-        _snakeUnits.clear()
-        _snakeUnits.add(snakeHead)
+        _uiState.value = _uiState.value.copy(snakeUnits = listOf(snakeHead))
     }
 }

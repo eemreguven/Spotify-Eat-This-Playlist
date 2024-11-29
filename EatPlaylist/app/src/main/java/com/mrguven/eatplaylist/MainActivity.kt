@@ -17,10 +17,10 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.mrguven.eatplaylist.ui.gamescreen.GameScreen
+import com.mrguven.eatplaylist.ui.game.GameScreen
 import com.mrguven.eatplaylist.ui.theme.EatPlaylistTheme
-import com.mrguven.eatplaylist.viewmodel.EatPlaylistViewModel
-import com.mrguven.eatplaylist.viewmodel.SpotifyViewModel
+import com.mrguven.eatplaylist.ui.game.GameViewModel
+import com.mrguven.eatplaylist.ui.spotify.SpotifyViewModel
 import com.spotify.sdk.android.auth.AuthorizationClient
 import com.spotify.sdk.android.auth.AuthorizationRequest
 import com.spotify.sdk.android.auth.AuthorizationResponse
@@ -34,7 +34,7 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var authResultLauncher: ActivityResultLauncher<Intent>
 
-    private val gameViewModel by viewModels<EatPlaylistViewModel>()
+    private val gameViewModel by viewModels<GameViewModel>()
     private val spotifyViewModel by viewModels<SpotifyViewModel>()
 
     override fun onCreate(savedInstanceState: Bundle?) {

@@ -1,4 +1,4 @@
-package com.mrguven.eatplaylist.viewmodel
+package com.mrguven.eatplaylist.ui.spotify
 
 import android.content.Context
 import android.graphics.Bitmap
